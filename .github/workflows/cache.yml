@@ -1,25 +1,51 @@
-name: CI with Cache
+name: CI with Dependency Caching
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
-
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
       - name: Cache dependencies
         id: cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
-          key: cache-1c85831
-
+          path: |
+            node_modules
+            ~/.npm
+          key: cache-1c85831-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            cache-1c85831-${{ runner.os }}-node-
+      
       - name: prime-cache-1c85831
-        run: echo "Cache hit: ${{ steps.cache.outputs.cache-hit }}"
+        run: |
+          if [ "${{ steps.cache.outputs.cache-hit }}" == "true" ]; then
+            echo "✅ Cache hit! Dependencies restored from cache."
+          else
+            echo "❌ Cache miss! Dependencies will be installed and cached."
+          fi
+          echo "Cache hit status: ${{ steps.cache.outputs.cache-hit }}"
+      
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
+      
+      - name: Run tests
+        run: npm test --if-present
+      
+      - name: Build project
+        run: npm run build --if-present
